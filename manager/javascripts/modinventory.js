@@ -70,6 +70,10 @@ function normalizeFilterToken(value) {
 		.replace(/[^a-z0-9]/g, "");
 }
 
+function escapeRegex(value) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 class ModInventoryService {
 	constructor(options = {}) {
 		this.modsRoot = options.modsRoot || DEFAULT_MODS_ROOT;
@@ -262,6 +266,7 @@ class ModInventoryService {
 					displayName: payloadMetadata?.displayName || entryMetadata.displayName || id,
 					shortName: sanitizeShortLabel(entryMetadata.shortName || id),
 					category: "Aircraft",
+					type: "Aircraft",
 					coalition: entryMetadata.coalition || "blue",
 					sourcePath,
 					entryFile: fs.existsSync(entryFile) ? entryFile : undefined,
@@ -296,7 +301,8 @@ class ModInventoryService {
 					modId: entry.name,
 					displayName: payloadMetadata?.displayName || unit.displayName || entryMetadata.displayName || id,
 					shortName: sanitizeShortLabel(unit.shortName || unit.displayName || id),
-					category: "Aircraft",
+					category: unit.category || "Aircraft",
+					type: unit.type || "Aircraft",
 					coalition: entryMetadata.coalition || "blue",
 					sourcePath,
 					entryFile: fs.existsSync(entryFile) ? entryFile : undefined,
@@ -547,21 +553,171 @@ class ModInventoryService {
 	_parseTechUnitFile(filePath) {
 		try {
 			const content = fs.readFileSync(filePath, "utf-8");
-			const nameMatch = content.match(/Name\s*=\s*['"]([^'"]+)['"]/i);
-			const displayMatch = content.match(/DisplayName\s*=\s*_?\(?["']([^"']+)["']/i);
+			const registration = this._extractUnitRegistration(content);
+			const unitObject = registration.objectName;
+			const name =
+				this._matchObjectString(content, unitObject, "Name") ||
+				this._matchBareProperty(content, "Name");
+			const displayName =
+				this._matchObjectString(content, unitObject, "DisplayName") ||
+				this._matchBareProperty(content, "DisplayName");
 			const lengthMatch = content.match(/length\s*=\s*([0-9]+\.?[0-9]*)/i);
-			const id = nameMatch ? nameMatch[1] : path.basename(filePath, ".lua");
+			const categoryInfo = this._inferTechUnitCategory(content, registration);
+			const id = name || path.basename(filePath, ".lua");
 			return {
 				id,
-				displayName: displayMatch ? stripLocalizationWrapper(displayMatch[1]) : id,
+				displayName: displayName || id,
 				shortName: sanitizeShortLabel(id),
 				length: lengthMatch ? parseFloat(lengthMatch[1]) : null,
-				aliases: [path.basename(filePath, ".lua"), id]
+				aliases: [path.basename(filePath, ".lua"), id],
+				category: categoryInfo.category,
+				type: categoryInfo.type
 			};
 		} catch (error) {
 			logger.log(`[mods] Unable to parse ${filePath}: ${error}`);
 			return undefined;
 		}
+	}
+
+	_extractUnitRegistration(content) {
+		const match = content.match(/add_(aircraft|helicopter|surface_unit|ship)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/i);
+		if (!match) {
+			return { kind: undefined, objectName: undefined };
+		}
+		return {
+			kind: match[1].toLowerCase(),
+			objectName: match[2]
+		};
+	}
+
+	_matchObjectString(content, objectName, propertyName) {
+		if (!content || !objectName || !propertyName) {
+			return undefined;
+		}
+		const regex = new RegExp(
+			`(?:^|\\n)\\s*${escapeRegex(objectName)}\\.${propertyName}\\s*=\\s*(?:_\\()?["']([^"']+)["']\\)?`,
+			"i"
+		);
+		const match = content.match(regex);
+		return match ? stripLocalizationWrapper(match[1]) : undefined;
+	}
+
+	_matchBareProperty(content, propertyName) {
+		if (!content || !propertyName) {
+			return undefined;
+		}
+		const regex = new RegExp(`(?:^|\\n)\\s*${propertyName}\\s*=\\s*(?:_\\()?["']([^"']+)["']\\)?`, "i");
+		const match = content.match(regex);
+		return match ? stripLocalizationWrapper(match[1]) : undefined;
+	}
+
+	_matchObjectCategory(content, objectName) {
+		if (!content) {
+			return undefined;
+		}
+		if (objectName) {
+			const regex = new RegExp(`(?:^|\\n)\\s*${escapeRegex(objectName)}\\.category\\s*=\\s*["']([^"']+)["']`, "i");
+			const match = content.match(regex);
+			if (match) {
+				return match[1];
+			}
+		}
+		const bareMatch = content.match(/(?:^|\n)\s*category\s*=\s*["']([^"']+)["']/i);
+		return bareMatch ? bareMatch[1] : undefined;
+	}
+
+	_matchAttributeBlock(content, objectName) {
+		if (!content) {
+			return "";
+		}
+		if (objectName) {
+			const regex = new RegExp(
+				`(?:^|\\n)\\s*${escapeRegex(objectName)}\\.attribute\\s*=\\s*{([\\s\\S]*?)}`,
+				"i"
+			);
+			const match = content.match(regex);
+			if (match) {
+				return match[1];
+			}
+		}
+		const bareMatch = content.match(/(?:^|\n)\s*attribute\s*=\s*{([\s\S]*?)}/i);
+		return bareMatch ? bareMatch[1] : "";
+	}
+
+	_inferTechUnitCategory(content, registration = {}) {
+		const objectName = registration.objectName;
+		const declaredCategory = this._matchObjectCategory(content, objectName);
+		const attributeBlock = this._matchAttributeBlock(content, objectName);
+		const categoryHint = (declaredCategory || "").toLowerCase();
+		const attributeHint = attributeBlock.toLowerCase();
+
+		if (
+			registration.kind === "ship" ||
+			categoryHint.includes("ship") ||
+			categoryHint.includes("navy") ||
+			categoryHint.includes("carrier") ||
+			categoryHint.includes("frigate") ||
+			categoryHint.includes("destroyer") ||
+			categoryHint.includes("cruiser") ||
+			attributeHint.includes("wstype_navy") ||
+			attributeHint.includes("wstype_ship")
+		) {
+			return {
+				category: "NavyUnit",
+				type: this._normalizeCategoryType(declaredCategory, "Naval Unit")
+			};
+		}
+
+		if (registration.kind === "helicopter" || attributeHint.includes("wstype_helicopter")) {
+			return { category: "Helicopter", type: "Helicopter" };
+		}
+
+		if (
+			categoryHint.includes("infantry") ||
+			categoryHint.includes("armor") ||
+			categoryHint.includes("vehicle") ||
+			categoryHint.includes("artillery") ||
+			categoryHint.includes("fortification") ||
+			categoryHint.includes("sam") ||
+			categoryHint.includes("radar") ||
+			registration.kind === "surface_unit" ||
+			attributeHint.includes("wstype_ground") ||
+			attributeHint.includes("wstype_tank") ||
+			attributeHint.includes("wstype_genericinfantry") ||
+			attributeHint.includes("wstype_genericifv")
+		) {
+			return {
+				category: "GroundUnit",
+				type: this._normalizeCategoryType(
+					declaredCategory || (attributeHint.includes("wstype_genericinfantry") ? "Infantry" : undefined),
+					"Ground Unit"
+				)
+			};
+		}
+
+		if (
+			registration.kind === "aircraft" ||
+			attributeHint.includes("wstype_airplane") ||
+			attributeHint.includes("wstype_air")
+		) {
+			return { category: "Aircraft", type: "Aircraft" };
+		}
+
+		return { category: "Aircraft", type: "Aircraft" };
+	}
+
+	_normalizeCategoryType(value, fallback) {
+		if (!value) {
+			return fallback;
+		}
+		const normalized = value.trim();
+		if (!normalized) {
+			return fallback;
+		}
+		if (/^ships?$/i.test(normalized)) {
+			return fallback;
+		}
+		return normalized;
 	}
 
 	_getMissionEditorPayloadDir() {
