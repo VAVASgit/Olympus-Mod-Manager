@@ -50,6 +50,7 @@ async function exists(location) {
 async function installHooks(folder) {
     logger.log(`Installing hooks in ${folder}`)
     await fsp.cp(path.join("..", "scripts", "OlympusHook.lua"), path.join(folder, "Scripts", "Hooks", "OlympusHook.lua"));
+    await fsp.cp(path.join("..", "Scripts", "OlympusCatalogExport.lua"), path.join(folder, "Scripts", "Hooks", "OlympusCatalogExport.lua"));
     logger.log(`Hooks succesfully installed in ${folder}`)
 }
 
@@ -60,6 +61,7 @@ async function installHooks(folder) {
  */
 
 async function installMod(folder, name) {
+    require('./catalog-install').preserve(folder);
     /* Timestamp string */
     logger.log(`Installing mod in ${folder}`)
 
@@ -76,10 +78,11 @@ async function installMod(folder, name) {
         await fsp.cp(path.join(__dirname, "..", "..", "..", "DCS Olympus backups", name, "databases", "units", "mods.json"), path.join(folder, "Mods", "Services", "Olympus", "databases", "units", "mods.json"));
     }
 
-    if (exists(path.join(__dirname, "..", "..", "..", "DCS Olympus backups", name, "scripts", "mods.lua"))) {
+    if (await exists(path.join(__dirname, "..", "..", "..", "DCS Olympus backups", name, "scripts", "mods.lua"))) {
         logger.log("Backup mods.lua found, copying over");
-        fsp.cp(path.join(__dirname, "..", "..", "..", "DCS Olympus backups", name, "scripts", "mods.lua"), path.join(folder, "Mods", "Services", "Olympus", "scripts", "mods.lua"));
+        await fsp.cp(path.join(__dirname, "..", "..", "..", "DCS Olympus backups", name, "scripts", "mods.lua"), path.join(folder, "Mods", "Services", "Olympus", "scripts", "mods.lua"));
     }
+    require('./catalog-install').restore(folder);
 }
 
 /** Asynchronously installs the olympus.json file
@@ -222,6 +225,7 @@ async function installCameraPlugin(folder) {
 async function deleteHooks(folder) {
     logger.log(`Deleting hooks from ${folder}`);
     await deleteFile(path.join(folder, "Scripts", "Hooks", "OlympusHook.lua"));
+    await deleteFile(path.join(folder, "Scripts", "Hooks", "OlympusCatalogExport.lua"));
 }
 
 /** Asynchronously deletes the Mod folder
@@ -229,6 +233,7 @@ async function deleteHooks(folder) {
  * @param {String} folder The base Saved Games folder where Olympus is installed
  */
 async function deleteMod(folder, name) {
+    require('./catalog-install').preserve(folder);
     logger.log(`Deleting mod from ${folder}`);
 
     if (await exists(path.join(folder, "Mods", "Services", "Olympus"))) {

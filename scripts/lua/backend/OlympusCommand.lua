@@ -738,7 +738,9 @@ function Olympus.generateAirUnitsTable(units)
 
 		-- Define the loadout
 		if payload == nil then
-			if loadout ~= nil and loadout ~= "" and Olympus.unitPayloads[unit.unitType] and Olympus.unitPayloads[unit.unitType][loadout] then
+			if loadout ~= nil and loadout ~= "" and Olympus.catalogPayloads and Olympus.catalogPayloads[unit.unitType] and Olympus.catalogPayloads[unit.unitType][loadout] then
+				payload = mist.utils.deepCopy(Olympus.catalogPayloads[unit.unitType][loadout])
+			elseif loadout ~= nil and loadout ~= "" and Olympus.unitPayloads[unit.unitType] and Olympus.unitPayloads[unit.unitType][loadout] then
 				payload = { ["pylons"] = Olympus.unitPayloads[unit.unitType][loadout], ["fuel"] = 999999, ["flare"] = 60, ["ammo_type"] = 1, ["chaff"] = 60, ["gun"] = 100 } 
 			elseif loadout ~= nil and loadout ~= "" and Olympus.modsUnitPayloads ~= nil and Olympus.modsUnitPayloads[unit.unitType] and Olympus.modsUnitPayloads[unit.unitType][loadout] then
 				payload = { ["pylons"] = Olympus.modsUnitPayloads[unit.unitType][loadout], ["fuel"] = 999999, ["flare"] = 60, ["ammo_type"] = 1, ["chaff"] = 60, ["gun"] = 100 } 

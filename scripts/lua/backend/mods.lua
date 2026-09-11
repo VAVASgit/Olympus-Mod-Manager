@@ -126,3 +126,9 @@ local function loadGeneratedMods()
 end
 
 loadGeneratedMods()
+
+-- Olympus catalog bridge (managed)
+pcall(function()
+    local lfs = require('lfs')
+    dofile(lfs.writedir() .. 'Mods/Services/Olympus/scripts/catalog.lua')
+end)

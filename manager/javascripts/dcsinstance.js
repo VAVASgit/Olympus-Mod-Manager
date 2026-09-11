@@ -210,7 +210,7 @@ class DCSInstance {
             this.installed = true;
             const options = {
                 compareContent: true,
-                excludeFilter: "databases, mods.lua"
+                excludeFilter: "databases, mods.lua, mods_generated.lua, catalog_generated.lua, *.bak"
             };
             var err1 = true;
             var err2 = true;

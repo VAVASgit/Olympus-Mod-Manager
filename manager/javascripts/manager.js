@@ -12,6 +12,7 @@ const { exec } = require("child_process");
 const { sleep } = require("./utils");
 const { ModInventoryService } = require('./modinventory');
 const { generateConfigs } = require('./modgenerator');
+const CatalogUI = require('./catalog-ui');
 
 class Manager {
     options = {
@@ -51,6 +52,7 @@ class Manager {
     modImportStateFile = path.join(__dirname, "..", "mods-import.json");
 
     constructor() {
+        this.catalog = new CatalogUI(this);
         /* Simple framework to define callbacks to events directly in the .ejs files. When an event happens, e.g. a button is clicked, the signal function is called with the function
         to call and an optional object to pass. An event will then be created, defined in index.html, and will be listened here. Using an eval call, the appropriate member function 
         will then be called */
@@ -229,7 +231,7 @@ class Manager {
 
             /* Send an event on manager started */
             document.dispatchEvent(new CustomEvent("managerStarted"));
-            this.promptModImportIfNeeded();
+            this.catalog.start().catch(error => logger.error(error));
         }
     }
 
@@ -251,6 +253,10 @@ class Manager {
      * 
      * @param {String} newMode The mode to switch to 
      */
+    onCatalogMenuClicked() { this.catalog.open(); }
+
+    onCatalogAction({ action, params }) { return this.catalog.action(action, params); }
+
     async switchMode(newMode) {
         /* Change the mode in the options.json and reload the page */
         var options = JSON.parse(fs.readFileSync("options.json"));

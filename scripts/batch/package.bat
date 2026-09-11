@@ -10,6 +10,7 @@ echo F|xcopy /Y .\scripts\batch\installer.bat .\package\installer.bat
 
 REM copy the hooks script
 echo F|xcopy /Y .\scripts\lua\hooks\OlympusHook.lua .\package\Scripts\OlympusHook.lua
+echo F|xcopy /Y .\scripts\lua\hooks\OlympusCatalogExport.lua .\package\Scripts\OlympusCatalogExport.lua
 
 REM copy the lua scripts
 echo D|xcopy /Y /S /E .\scripts\lua\backend .\package\mod\scripts
@@ -51,6 +52,7 @@ echo F|xcopy /Y .\package\olympus.json .\zip\config\olympus.json
 
 REM copy the hooks script
 echo F|xcopy /Y .\package\Scripts\OlympusHook.lua .\zip\Scripts\Hooks\OlympusHook.lua
+echo F|xcopy /Y .\package\Scripts\OlympusCatalogExport.lua .\zip\Scripts\Hooks\OlympusCatalogExport.lua
 
 REM copy the mod folder
 echo D|xcopy /Y /S /E .\package\mod .\zip\Mods\Services\Olympus
